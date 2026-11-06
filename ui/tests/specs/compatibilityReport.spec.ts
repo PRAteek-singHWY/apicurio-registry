@@ -197,6 +197,56 @@ test("Compatibility report - each cause is highlighted in the submitted content 
     await expect(content.locator(".editor.modified .squiggly-error").first()).toBeVisible();
 });
 
+const EXPLAINED_CODE = "READER_FIELD_MISSING_DEFAULT_VALUE";
+
+test("Compatibility report - a cause with a code shows its explanation and an example on request, and a cause without one shows none", async ({ page }) => {
+    const causes = [
+        { ...CAUSES[0], code: EXPLAINED_CODE },
+        { description: "The record was renamed.", context: "/name" }
+    ];
+    await mockRegistry(page, {
+        status: 400,
+        title: "Incompatible artifact: test-artifact [AVRO]",
+        ruleViolation: { ruleType: "COMPATIBILITY", causes },
+        causes
+    });
+    // The explanation endpoint (#10471) is mocked until it is merged.
+    const explanationRequests: string[] = [];
+    await page.route("**/apis/registry/v3/system/compatibility/**", route => {
+        explanationRequests.push(new URL(route.request().url()).pathname);
+        return json(route, 200, {
+            code: EXPLAINED_CODE,
+            description: "A field was added without a default value.",
+            help: "A reader using the new schema cannot read old data, which has **no value** for the field.",
+            examples: [{
+                original: "{\"type\":\"record\",\"name\":\"R\",\"fields\":[]}",
+                updated: "{\"type\":\"record\",\"name\":\"R\",\"fields\":[{\"name\":\"added\",\"type\":\"string\"}]}",
+                direction: "BACKWARD",
+                compatible: false
+            }]
+        });
+    });
+
+    await submitNewVersion(page);
+
+    const groups = page.getByTestId("compatibility-report-group");
+    await expect(groups).toHaveCount(2);
+    // Only the cause with a code offers an explanation, and nothing is fetched until it is asked for.
+    await expect(groups.nth(0).getByRole("button", { name: "Explain" })).toHaveCount(1);
+    await expect(groups.nth(1).getByRole("button", { name: "Explain" })).toHaveCount(0);
+    expect(explanationRequests).toEqual([]);
+
+    await groups.nth(0).getByRole("button", { name: "Explain" }).click();
+
+    const help = groups.nth(0).getByTestId("compatibility-report-explanation-help");
+    await expect(help).toContainText("A reader using the new schema cannot read old data");
+    await expect(help.locator("strong")).toHaveText("no value");
+    const example = groups.nth(0).getByTestId("compatibility-report-example");
+    await expect(example).toContainText("Incompatible (backward)");
+    await expect(example.locator(".monaco-diff-editor .editor.modified")).toContainText("\"added\"");
+    expect(explanationRequests).toEqual([`/apis/registry/v3/system/compatibility/AVRO/differences/${EXPLAINED_CODE}`]);
+});
+
 test("Compatibility report - testing content from the version page shows the causes and the tested content", async ({ page }) => {
     await mockRegistry(page, ARTIFACT_VIOLATION);
 

@@ -18,6 +18,8 @@ import type { editor } from "monaco-editor";
 import type { Monaco } from "@monaco-editor/react";
 import { RegistryCodeEditor } from "@app/components/codeEditor/RegistryEditors.tsx";
 import { DiffView } from "@app/components/common/DiffView.tsx";
+import { CauseExplanation } from "@app/components/ruleViolation/CauseExplanation.tsx";
+import { DifferenceExplanation } from "@services/useCompatibilityService.ts";
 import { draftContentToLanguage } from "@utils/content.utils.ts";
 import { newLoaderGuard } from "@utils/loader.utils.ts";
 import { buildContentMarkers, ContentIssue, ContentMarker } from "@utils/marker.utils.ts";
@@ -38,6 +40,8 @@ export type CompatibilityReportProps = {
     contentType?: string;
     /** Loads the content of the version the causes were compared against. */
     loadComparedContent?: (version: string) => Promise<string>;
+    /** Loads the explanation of a cause's kind of difference, by its code. Without it, no explanations are offered. */
+    loadExplanation?: (code: string) => Promise<DifferenceExplanation | undefined>;
 };
 
 /** The empty JSON Pointer is the whole document, which would otherwise render as a blank title. */
@@ -150,15 +154,23 @@ export const CompatibilityReport: FunctionComponent<CompatibilityReportProps> = 
         setIsComparing(!isComparing);
     };
 
+    /** Whether a cause can be explained: it has a code, and explanations can be loaded. */
+    const isExplainable = (cause: ViolationCause): boolean => props.loadExplanation !== undefined && cause.code !== undefined;
+
     const causeRows = (group: ViolationGroup) => group.causes
-        .filter(cause => group.location !== undefined || cause.direction !== undefined)
+        .filter(cause => group.location !== undefined || cause.direction !== undefined || isExplainable(cause))
         .map((cause, idx) => (
-            <div key={idx} className="compatibility-report-cause" data-testid="compatibility-report-cause">
-                {group.location !== undefined && <span>{cause.description}</span>}
-                {cause.direction !== undefined && (
-                    <Label isCompact={true} className="compatibility-report-direction">
-                        {DIRECTION_LABELS[cause.direction] ?? `Breaks ${cause.direction}`}
-                    </Label>
+            <div key={idx} data-testid="compatibility-report-cause">
+                <div className="compatibility-report-cause">
+                    {group.location !== undefined && <span>{cause.description}</span>}
+                    {cause.direction !== undefined && (
+                        <Label isCompact={true} className="compatibility-report-direction">
+                            {DIRECTION_LABELS[cause.direction] ?? `Breaks ${cause.direction}`}
+                        </Label>
+                    )}
+                </div>
+                {props.loadExplanation !== undefined && cause.code !== undefined && (
+                    <CauseExplanation code={cause.code} loadExplanation={props.loadExplanation} />
                 )}
             </div>
         ));

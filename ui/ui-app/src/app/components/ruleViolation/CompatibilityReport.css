@@ -64,3 +64,34 @@
     color: var(--pf-t--global--color--status--danger--default);
     margin-bottom: 8px;
 }
+
+.compatibility-report-explanation {
+    margin-top: 4px;
+}
+
+.compatibility-report-explanation-help {
+    margin-bottom: 8px;
+}
+
+.compatibility-report-explanation-help p,
+.compatibility-report-explanation-help ul,
+.compatibility-report-explanation-help ol {
+    margin-bottom: 8px;
+}
+
+.compatibility-report-explanation-error {
+    color: var(--pf-t--global--color--status--danger--default);
+}
+
+.compatibility-report-example {
+    margin-bottom: 12px;
+}
+
+/* An example's diff has no height of its own, so it gets a fixed one. */
+.compatibility-report-example-diff {
+    display: flex;
+    flex-direction: column;
+    height: 240px;
+    margin-top: 4px;
+    border: 1px solid #ddd;
+}

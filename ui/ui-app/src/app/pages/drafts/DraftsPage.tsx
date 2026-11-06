@@ -342,6 +342,7 @@ export const DraftsPage: FunctionComponent<PageProperties> = () => {
                 contentType={invalidContent?.contentType}
                 groupId={draftToFinalize?.groupId}
                 artifactId={draftToFinalize?.draftId}
+                artifactType={draftToFinalize?.type}
                 isOpen={isInvalidContentModalOpen}
                 onClose={() => {
                     setInvalidContentError(undefined);

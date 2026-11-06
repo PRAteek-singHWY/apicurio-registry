@@ -542,6 +542,7 @@ export const VersionPage: FunctionComponent<PageProperties> = () => {
                 contentType={invalidContent?.contentType}
                 groupId={groupId}
                 artifactId={artifactId}
+                artifactType={artifact?.artifactType}
                 isOpen={isInvalidContentModalOpen}
                 onClose={() => {
                     setInvalidContentError(undefined);

@@ -527,6 +527,7 @@ export const ArtifactPage: FunctionComponent<PageProperties> = () => {
                 contentType={invalidContent?.contentType}
                 groupId={groupId}
                 artifactId={artifactId}
+                artifactType={artifact?.artifactType}
                 isOpen={isInvalidContentModalOpen}
                 onClose={() => {setIsInvalidContentModalOpen(false);}} />
         </PageErrorHandler>

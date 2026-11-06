@@ -15,6 +15,7 @@ import { ExclamationCircleIcon } from "@patternfly/react-icons";
 import { RuleViolationProblemDetails } from "@sdk/lib/generated-client/models";
 import { CompatibilityReport } from "@app/components/ruleViolation";
 import { GroupsService, useGroupsService } from "@services/useGroupsService.ts";
+import { CompatibilityService, DifferenceExplanation, useCompatibilityService } from "@services/useCompatibilityService.ts";
 import { causesOf, isCompatibilityViolation, isRuleViolation, toViolationCause } from "@utils/ruleViolation.utils.ts";
 
 
@@ -29,6 +30,8 @@ export type InvalidContentModalProps = {
     /** The artifact the content was submitted to, used to load the version it was compared against. */
     groupId?: string | null;
     artifactId?: string;
+    /** The artifact's type, used to look up the explanation of each kind of difference. */
+    artifactType?: string | null;
     isOpen: boolean;
     onClose: () => void;
 };
@@ -39,10 +42,15 @@ export type InvalidContentModalProps = {
  */
 export const InvalidContentModal: FunctionComponent<InvalidContentModalProps> = (props: InvalidContentModalProps) => {
     const groups: GroupsService = useGroupsService();
+    const compatibility: CompatibilityService = useCompatibilityService();
 
     const artifactId: string | undefined = props.artifactId;
     const loadComparedContent = artifactId === undefined ? undefined : (version: string): Promise<string> =>
         groups.getArtifactVersionContent(props.groupId ?? null, artifactId, version);
+
+    const artifactType: string | undefined = props.artifactType ?? undefined;
+    const loadExplanation = artifactType === undefined ? undefined : (code: string): Promise<DifferenceExplanation | undefined> =>
+        compatibility.getDifferenceExplanation(artifactType, code);
 
     // A report with content shows it next to the causes, in a modal that fills the viewport height.
     const isFullHeight: boolean = props.content !== undefined && isCompatibilityViolation(props.error);
@@ -56,6 +64,7 @@ export const InvalidContentModal: FunctionComponent<InvalidContentModalProps> = 
                         content={props.content}
                         contentType={props.contentType}
                         loadComparedContent={loadComparedContent}
+                        loadExplanation={loadExplanation}
                     />
                 );
             } else if (isRuleViolation(props.error)) {

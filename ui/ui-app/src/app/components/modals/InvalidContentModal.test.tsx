@@ -10,6 +10,11 @@ vi.mock("@services/useGroupsService.ts", () => ({
     useGroupsService: () => ({ getArtifactVersionContent })
 }));
 
+const getDifferenceExplanation = vi.fn();
+vi.mock("@services/useCompatibilityService.ts", () => ({
+    useCompatibilityService: () => ({ getDifferenceExplanation })
+}));
+
 // content.utils imports this module only for its ArtifactTypes constants; the real one loads the
 // config service, which needs the browser's registry config global.
 vi.mock("@services/useArtifactTypesService.ts", () => ({
@@ -79,7 +84,7 @@ const lastMarkers = (): Marker[] => {
 };
 const lines = (markers: Marker[]): [number, number, string][] => markers.map(m => [m.startLineNumber, m.endLineNumber, m.message]);
 
-const modal = (error: Partial<RuleViolationProblemDetails>, content?: string) => (
+const modal = (error: Partial<RuleViolationProblemDetails>, content?: string, artifactType: string | null = "JSON") => (
     <InvalidContentModal
         isOpen={true}
         error={error as RuleViolationProblemDetails}
@@ -87,6 +92,7 @@ const modal = (error: Partial<RuleViolationProblemDetails>, content?: string) =>
         contentType="application/json"
         groupId="g"
         artifactId="a"
+        artifactType={artifactType}
         onClose={() => {}}
     />
 );
@@ -363,6 +369,86 @@ describe("InvalidContentModal", () => {
             const compared = screen.getByTestId("compared-content");
             expect(lines(JSON.parse(compared.getAttribute("data-original-markers") ?? "[]"))).toEqual([[4, 6, "b has no default"]]);
             expect(lines(JSON.parse(compared.getAttribute("data-modified-markers") ?? "[]"))).toEqual([[6, 6, "b has no default"]]);
+        });
+    });
+
+    describe("explanations", () => {
+        const CODE: string = "STRING_TYPE_MAX_LENGTH_DECREASED";
+        const violation: Partial<RuleViolationProblemDetails> = {
+            ruleViolation: { ruleType: "COMPATIBILITY" },
+            causes: [
+                { description: "maxLength decreased", context: "/properties/name", code: CODE },
+                { description: "name changed", context: "/name" }
+            ]
+        };
+
+        it("offers an explanation only for a cause with a code, and loads it when it is expanded", async () => {
+            getDifferenceExplanation.mockResolvedValue({
+                code: CODE,
+                description: "The 'maxLength' string-length limit was decreased.",
+                help: "Lowering `maxLength` **rejects** longer strings.<script>alert(1)</script>",
+                examples: [{ original: "{\"maxLength\":10}", updated: "{\"maxLength\":5}", direction: "BACKWARD", compatible: false }]
+            });
+            render(modal(violation, SUBMITTED));
+
+            expect(screen.getAllByRole("button", { name: "Explain" })).toHaveLength(1);
+            expect(getDifferenceExplanation).not.toHaveBeenCalled();
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+            });
+
+            expect(getDifferenceExplanation).toHaveBeenCalledWith("JSON", CODE);
+            const help = screen.getByTestId("compatibility-report-explanation-help");
+            expect(help.innerHTML).toBe("<p>Lowering <code>maxLength</code> <strong>rejects</strong> longer strings.</p>\n");
+            const example = screen.getByTestId("compatibility-report-example");
+            expect(example).toHaveTextContent("Incompatible (backward)");
+            expect(screen.getByTestId("compared-content")).toHaveTextContent("{\"maxLength\":10}|{\"maxLength\":5}");
+        });
+
+        it("loads an explanation only once when it is collapsed and expanded again", async () => {
+            getDifferenceExplanation.mockResolvedValue({ code: CODE, description: "decreased", help: "Help." });
+            render(modal(violation, SUBMITTED));
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+            });
+            fireEvent.click(screen.getByRole("button", { name: "Hide explanation" }));
+            await act(async () => {
+                fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+            });
+
+            expect(getDifferenceExplanation).toHaveBeenCalledTimes(1);
+            expect(screen.getByTestId("compatibility-report-explanation-help")).toHaveTextContent("Help.");
+        });
+
+        it("shows nothing extra when the server has no explanation for the code", async () => {
+            getDifferenceExplanation.mockResolvedValue(undefined);
+            render(modal(violation, SUBMITTED));
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+            });
+
+            expect(screen.queryByTestId("compatibility-report-explanation")).not.toBeInTheDocument();
+            expect(groupTexts()).toEqual(["/properties/namemaxLength decreased", "/namename changed"]);
+        });
+
+        it("says so when the explanation cannot be loaded", async () => {
+            getDifferenceExplanation.mockRejectedValue({ status: 500 });
+            render(modal(violation, SUBMITTED));
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+            });
+
+            expect(screen.getByTestId("compatibility-report-explanation")).toHaveTextContent("The explanation could not be loaded.");
+        });
+
+        it("offers no explanation when the artifact type is not known", () => {
+            render(modal(violation, SUBMITTED, null));
+
+            expect(screen.queryByRole("button", { name: "Explain" })).not.toBeInTheDocument();
         });
     });
 });
